@@ -1,0 +1,20 @@
+# Entornos y caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+
+# Datos locales
+toy.db
+*.sqlite3
+*.db
+
+# Config / credenciales
+.env
+*.env
+.streamlit/
+
+# macOS
+.DS_Store
+

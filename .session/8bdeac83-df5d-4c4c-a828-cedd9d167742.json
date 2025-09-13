@@ -1,0 +1,190 @@
+[
+  {
+    "ts": 1757770276.478045,
+    "question": "ventas por categoría por mes",
+    "plan": {
+      "sql": "WITH MonthlySales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT month, category, total_sales FROM MonthlySales;",
+      "explain": "Esta consulta calcula las ventas totales por categoría de producto agrupadas por mes.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Los resultados mostrarán las ventas mensuales por categoría."
+    },
+    "sql": "WITH MonthlySales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT month, category, total_sales FROM MonthlySales;",
+    "df_head": [
+      {
+        "month": "2024-01",
+        "category": "Beauty",
+        "total_sales": 104
+      },
+      {
+        "month": "2024-01",
+        "category": "Books",
+        "total_sales": 168
+      },
+      {
+        "month": "2024-01",
+        "category": "Electronics",
+        "total_sales": 86
+      },
+      {
+        "month": "2024-01",
+        "category": "Home",
+        "total_sales": 160
+      },
+      {
+        "month": "2024-01",
+        "category": "Sports",
+        "total_sales": 143
+      },
+      {
+        "month": "2024-02",
+        "category": "Beauty",
+        "total_sales": 77
+      },
+      {
+        "month": "2024-02",
+        "category": "Books",
+        "total_sales": 107
+      },
+      {
+        "month": "2024-02",
+        "category": "Electronics",
+        "total_sales": 78
+      },
+      {
+        "month": "2024-02",
+        "category": "Home",
+        "total_sales": 119
+      },
+      {
+        "month": "2024-02",
+        "category": "Sports",
+        "total_sales": 159
+      },
+      {
+        "month": "2024-03",
+        "category": "Beauty",
+        "total_sales": 76
+      },
+      {
+        "month": "2024-03",
+        "category": "Books",
+        "total_sales": 169
+      },
+      {
+        "month": "2024-03",
+        "category": "Electronics",
+        "total_sales": 75
+      },
+      {
+        "month": "2024-03",
+        "category": "Home",
+        "total_sales": 149
+      },
+      {
+        "month": "2024-03",
+        "category": "Sports",
+        "total_sales": 148
+      },
+      {
+        "month": "2024-04",
+        "category": "Beauty",
+        "total_sales": 102
+      },
+      {
+        "month": "2024-04",
+        "category": "Books",
+        "total_sales": 158
+      },
+      {
+        "month": "2024-04",
+        "category": "Electronics",
+        "total_sales": 105
+      },
+      {
+        "month": "2024-04",
+        "category": "Home",
+        "total_sales": 139
+      },
+      {
+        "month": "2024-04",
+        "category": "Sports",
+        "total_sales": 113
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757770301.106557,
+    "question": "ranking de categoria con mas ventas",
+    "plan": {
+      "sql": "SELECT p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category ORDER BY total_sales DESC",
+      "explain": "Esta consulta suma la cantidad de ventas por categoría de producto, agrupando los resultados por categoría y ordenándolos en orden descendente según las ventas totales.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Esta consulta muestra el ranking de categorías basado en las ventas totales."
+    },
+    "sql": "SELECT p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category ORDER BY total_sales DESC",
+    "df_head": [
+      {
+        "category": "Books",
+        "total_sales": 2841
+      },
+      {
+        "category": "Sports",
+        "total_sales": 2830
+      },
+      {
+        "category": "Home",
+        "total_sales": 2739
+      },
+      {
+        "category": "Beauty",
+        "total_sales": 1868
+      },
+      {
+        "category": "Electronics",
+        "total_sales": 1608
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757770336.542237,
+    "question": "ranking de categoria con mas o menos  crecimiento de ventas  ",
+    "plan": {
+      "sql": "WITH SalesGrowth AS (SELECT p.category, SUM(o.quantity) AS total_sales, SUM(CASE WHEN strftime('%Y', o.order_date) = (SELECT MAX(strftime('%Y', order_date)) FROM orders) THEN o.quantity ELSE 0 END) AS latest_year_sales, SUM(CASE WHEN strftime('%Y', o.order_date) = (SELECT MAX(strftime('%Y', order_date)) - 1 FROM orders) THEN o.quantity ELSE 0 END) AS previous_year_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category) SELECT category, (latest_year_sales - previous_year_sales) AS sales_growth FROM SalesGrowth ORDER BY sales_growth DESC",
+      "explain": "Esta consulta calcula el crecimiento de ventas por categoría al comparar las ventas del último año con las del año anterior, y luego ordena las categorías por el crecimiento en orden descendente.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Los resultados muestran el crecimiento de ventas para cada categoría, lo que permite identificar cuáles han crecido más o menos."
+    },
+    "sql": "WITH SalesGrowth AS (SELECT p.category, SUM(o.quantity) AS total_sales, SUM(CASE WHEN strftime('%Y', o.order_date) = (SELECT MAX(strftime('%Y', order_date)) FROM orders) THEN o.quantity ELSE 0 END) AS latest_year_sales, SUM(CASE WHEN strftime('%Y', o.order_date) = (SELECT MAX(strftime('%Y', order_date)) - 1 FROM orders) THEN o.quantity ELSE 0 END) AS previous_year_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category) SELECT category, (latest_year_sales - previous_year_sales) AS sales_growth FROM SalesGrowth ORDER BY sales_growth DESC",
+    "df_head": [
+      {
+        "category": "Sports",
+        "sales_growth": 1185
+      },
+      {
+        "category": "Books",
+        "sales_growth": 1067
+      },
+      {
+        "category": "Home",
+        "sales_growth": 1038
+      },
+      {
+        "category": "Beauty",
+        "sales_growth": 725
+      },
+      {
+        "category": "Electronics",
+        "sales_growth": 689
+      }
+    ],
+    "error": null
+  }
+]

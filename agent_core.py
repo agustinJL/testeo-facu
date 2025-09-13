@@ -1,0 +1,188 @@
+import os, json, io, uuid, pathlib, time
+import pandas as pd
+import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+from openai import OpenAI
+from tools_sql import get_schema, run_sql
+
+# ========= Memoria (helpers) =========
+SESS_DIR = pathlib.Path("./.session")
+SESS_DIR.mkdir(exist_ok=True)
+
+def _session_path(session_id: str):
+    return SESS_DIR / f"{session_id}.json"
+
+def load_session(session_id: str) -> list:
+    p = _session_path(session_id)
+    if p.exists():
+        return json.loads(p.read_text())
+    return []
+
+def save_session(session_id: str, history: list):
+    _session_path(session_id).write_text(json.dumps(history, ensure_ascii=False, indent=2))
+
+def summarize_for_context(history: list, max_items: int = 4) -> str:
+    """
+    Devuelve últimas interacciones como bullets cortos:
+    - Q: ...
+    - SQL: ...
+    - Insight: ...
+    """
+    if not history:
+        return ""
+    tail = history[-max_items:]
+    bullets = []
+    for h in tail:
+        q = (h.get("question", "") or "")[:220]
+        sql = (h.get("sql", "") or "").replace("\n", " ")[:220]
+        insight = (h.get("plan", {}).get("explain", "") or "")[:240]
+        bullets.append(f"- Q: {q}\n  SQL: {sql}\n  Insight: {insight}")
+    return "\n".join(bullets)
+
+# ========= LLM setup =========
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+MODEL = os.getenv("MODEL", "gpt-4o-mini")
+
+SYSTEM = open("sample_prompts/system_sql_analyst.md").read()
+
+# ========= Planificación =========
+def plan_query(user_question: str, schema: dict, session_id: str) -> dict:
+    # contexto corto desde la sesión
+    short_ctx = summarize_for_context(load_session(session_id))
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                SYSTEM
+                + "\n\nIMPORTANTE: Responde en JSON válido (un único objeto JSON)."
+                + "\nContexto reciente (resumen para mantener coherencia):\n"
+                + (short_ctx or "- (sin contexto)")
+            )
+        },
+        {
+            "role": "user",
+            "content": (
+                "Formato de salida: JSON estricto. "
+                "Entrega solo un objeto JSON, sin texto adicional."
+                f"\nEsquema disponible (en JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
+                f"Pregunta: {user_question}"
+            )
+        }
+    ]
+    resp = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        response_format={"type": "json_object"}
+    )
+    out = json.loads(resp.choices[0].message.content)
+    assert {"sql","explain","viz_suggestion","notes"} <= set(out.keys())
+    return out
+
+# ========= Charting =========
+def make_chart(df: pd.DataFrame, viz: dict):
+    if df.empty:
+        return None
+
+    kind = (viz or {}).get("type", "none")
+    if kind == "none":
+        return None
+
+    # Detectar columnas numéricas y no-numéricas
+    num_cols = df.select_dtypes(include=["number"]).columns.tolist()
+    cat_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
+
+    if not num_cols:
+        return None  # no hay nada que graficar
+
+    # defaults: primera cat y primera numérica
+    x = cat_cols[0] if cat_cols else df.columns[0]
+    y = num_cols[0] if num_cols else df.columns[1]  # fallback por si viene todo como object
+
+    # --- normalizaciones/fixes previos al plot ---
+    if not pd.api.types.is_numeric_dtype(df[y]):
+        df = df.copy()
+        df[y] = pd.to_numeric(df[y], errors="coerce")
+
+    try:
+        if pd.api.types.is_object_dtype(df[x]):
+            if df[x].astype(str).str.match(r"^\d{4}[-/]\d{2}([-/]\d{2})?$").all():
+                _x_dt = pd.to_datetime(df[x].astype(str), errors="coerce").rename("_x_dt")
+                df = pd.concat([df, _x_dt], axis=1).sort_values("_x_dt").drop(columns=["_x_dt"])
+    except Exception:
+        pass
+
+    df = df.dropna(subset=[y])
+    if df.empty:
+        return None
+
+    plt.figure()
+    if kind == "bar":
+        df.plot(kind="bar", x=x, y=y, legend=False)
+    elif kind == "line":
+        df.plot(kind="line", x=x, y=y, legend=False)
+    else:
+        return None
+
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    return buf
+
+# ========= Orquestación / Respuesta =========
+def answer(user_question: str, session_id: str):
+    schema = get_schema()
+    plan = plan_query(user_question, schema, session_id)
+    sql = plan.get("sql", "")
+
+    try:
+        df = run_sql(sql)
+        chart = make_chart(df, plan.get("viz_suggestion", {}))
+
+        # Guardar en historial
+        hist = load_session(session_id)
+        hist.append({
+            "ts": time.time(),
+            "question": user_question,
+            "plan": plan,
+            "sql": sql,
+            "df_head": df.head(20).to_dict(orient="records"),
+            "error": None,
+        })
+        save_session(session_id, hist)
+
+        return {
+            "plan": plan,
+            "sql": sql,
+            "df": df,
+            "chart_bytes": chart.read() if chart else None,
+            "error": None,
+        }
+    except Exception as e:
+        # Guardar igualmente el intento fallido
+        hist = load_session(session_id)
+        hist.append({
+            "ts": time.time(),
+            "question": user_question,
+            "plan": plan,
+            "sql": sql,
+            "df_head": None,
+            "error": str(e),
+        })
+        save_session(session_id, hist)
+
+        return {
+            "plan": plan,
+            "sql": sql,
+            "df": None,
+            "chart_bytes": None,
+            "error": str(e),
+        }
+
+
+def clear_session(session_id: str):
+    """Borra por completo el historial persistido de la sesión."""
+    p = _session_path(session_id)
+    if p.exists():
+        p.unlink()  # elimina el archivo .json

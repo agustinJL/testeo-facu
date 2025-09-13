@@ -1,0 +1,81 @@
+[
+  {
+    "ts": 1757769720.271374,
+    "question": "cual es la categoria que menos  crecio en los ultimos 6 meses, o incluso que decrecio",
+    "plan": {
+      "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') GROUP BY p.category) SELECT r.category FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY COALESCE(r.total_quantity, 0) - COALESCE(p.total_quantity, 0) ASC LIMIT 1;",
+      "explain": "Esta consulta compara las cantidades vendidas de cada categoría de productos en los últimos 6 meses con las de los 6 meses anteriores, y devuelve la categoría con menor crecimiento o decrecimiento.",
+      "viz_suggestion": {
+        "type": "none"
+      },
+      "notes": "La consulta devuelve solo una categoría. Si deseas más información o diferentes períodos de tiempo, por favor aclara."
+    },
+    "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') GROUP BY p.category) SELECT r.category FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY COALESCE(r.total_quantity, 0) - COALESCE(p.total_quantity, 0) ASC LIMIT 1;",
+    "df_head": [
+      {
+        "category": "Books"
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757769749.036601,
+    "question": "cual es la categoria que menos  crecio en los ultimos 6 meses, o incluso que decrecio, y poneme el % de decrecimiento",
+    "plan": {
+      "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - COALESCE(p.total_quantity, 0)) / COALESCE(p.total_quantity, 1)) * 100 AS growth_percentage FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY growth_percentage ASC LIMIT 1;",
+      "explain": "Esta consulta calcula el porcentaje de cambio en las cantidades vendidas de cada categoría en los últimos 6 meses en comparación con los 6 meses anteriores, y devuelve la categoría con menor porcentaje de crecimiento o decrecimiento.",
+      "viz_suggestion": {
+        "type": "none"
+      },
+      "notes": "El resultado incluirá la categoría que experimentó el menor crecimiento o decrecimiento y su respectivo porcentaje."
+    },
+    "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - COALESCE(p.total_quantity, 0)) / COALESCE(p.total_quantity, 1)) * 100 AS growth_percentage FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY growth_percentage ASC LIMIT 1;",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "growth_percentage": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757769821.537073,
+    "question": "cual es la categoria que menos  crecio en los ultimos 6 meses, o incluso que decrecio, y poneme el % de decrecimiento",
+    "plan": {
+      "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - p.total_quantity) / p.total_quantity * 100) AS percentage_change FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY percentage_change ASC LIMIT 1",
+      "explain": "Esta consulta compara las cantidades vendidas de cada categoría de productos en los últimos 6 meses con los 6 meses anteriores, calculando el porcentaje de cambio y devolviendo la categoría con menor crecimiento o decrecimiento.",
+      "viz_suggestion": {
+        "type": "none"
+      },
+      "notes": "La consulta muestra el % de decrecimiento para la categoría que ha tenido el peor desempeño en términos de ventas."
+    },
+    "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - p.total_quantity) / p.total_quantity * 100) AS percentage_change FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY percentage_change ASC LIMIT 1",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "percentage_change": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757769832.6398542,
+    "question": "cual es la categoria que menos  crecio en los ultimos 6 meses, o incluso que decrecio, y poneme el % de decrecimiento",
+    "plan": {
+      "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS recent_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS previous_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT COALESCE(r.category, p.category) AS category, ((r.recent_quantity - p.previous_quantity) * 100.0 / NULLIF(p.previous_quantity, 0)) AS percentage_change FROM recent_orders r FULL OUTER JOIN previous_orders p ON r.category = p.category ORDER BY percentage_change ASC LIMIT 1;",
+      "explain": "Esta consulta compara las cantidades vendidas de cada categoría de productos en los últimos 6 meses con las de los 6 meses anteriores. Calcula el porcentaje de cambio y devuelve la categoría con menor crecimiento o decrecimiento.",
+      "viz_suggestion": {
+        "type": "none"
+      },
+      "notes": "Se utiliza COALESCE para manejar categorías que pueden no tener ventas en uno de los periodos."
+    },
+    "sql": "WITH recent_orders AS (SELECT p.category, SUM(o.quantity) AS recent_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= DATE('now', '-6 months') GROUP BY p.category), previous_orders AS (SELECT p.category, SUM(o.quantity) AS previous_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < DATE('now', '-6 months') AND o.order_date >= DATE('now', '-12 months') GROUP BY p.category) SELECT COALESCE(r.category, p.category) AS category, ((r.recent_quantity - p.previous_quantity) * 100.0 / NULLIF(p.previous_quantity, 0)) AS percentage_change FROM recent_orders r FULL OUTER JOIN previous_orders p ON r.category = p.category ORDER BY percentage_change ASC LIMIT 1;",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "percentage_change": -17.37649063032368
+      }
+    ],
+    "error": null
+  }
+]

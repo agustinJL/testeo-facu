@@ -1,0 +1,173 @@
+[
+  {
+    "ts": 1757769968.5565069,
+    "question": "ventas por categoría por mes",
+    "plan": {
+      "sql": "WITH MonthlySales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT month, category, total_sales FROM MonthlySales ORDER BY month, category;",
+      "explain": "Esta consulta crea una CTE que suma las ventas por categoría y mes, agrupando por la fecha de la orden y la categoría del producto, luego selecciona esos datos ordenados por mes y categoría.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Los datos mostrarán las ventas totales de cada categoría por mes."
+    },
+    "sql": "WITH MonthlySales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT month, category, total_sales FROM MonthlySales ORDER BY month, category;",
+    "df_head": [
+      {
+        "month": "2024-01",
+        "category": "Beauty",
+        "total_sales": 104
+      },
+      {
+        "month": "2024-01",
+        "category": "Books",
+        "total_sales": 168
+      },
+      {
+        "month": "2024-01",
+        "category": "Electronics",
+        "total_sales": 86
+      },
+      {
+        "month": "2024-01",
+        "category": "Home",
+        "total_sales": 160
+      },
+      {
+        "month": "2024-01",
+        "category": "Sports",
+        "total_sales": 143
+      },
+      {
+        "month": "2024-02",
+        "category": "Beauty",
+        "total_sales": 77
+      },
+      {
+        "month": "2024-02",
+        "category": "Books",
+        "total_sales": 107
+      },
+      {
+        "month": "2024-02",
+        "category": "Electronics",
+        "total_sales": 78
+      },
+      {
+        "month": "2024-02",
+        "category": "Home",
+        "total_sales": 119
+      },
+      {
+        "month": "2024-02",
+        "category": "Sports",
+        "total_sales": 159
+      },
+      {
+        "month": "2024-03",
+        "category": "Beauty",
+        "total_sales": 76
+      },
+      {
+        "month": "2024-03",
+        "category": "Books",
+        "total_sales": 169
+      },
+      {
+        "month": "2024-03",
+        "category": "Electronics",
+        "total_sales": 75
+      },
+      {
+        "month": "2024-03",
+        "category": "Home",
+        "total_sales": 149
+      },
+      {
+        "month": "2024-03",
+        "category": "Sports",
+        "total_sales": 148
+      },
+      {
+        "month": "2024-04",
+        "category": "Beauty",
+        "total_sales": 102
+      },
+      {
+        "month": "2024-04",
+        "category": "Books",
+        "total_sales": 158
+      },
+      {
+        "month": "2024-04",
+        "category": "Electronics",
+        "total_sales": 105
+      },
+      {
+        "month": "2024-04",
+        "category": "Home",
+        "total_sales": 139
+      },
+      {
+        "month": "2024-04",
+        "category": "Sports",
+        "total_sales": 113
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757770009.321465,
+    "question": "cantidad de ventas beuty de los ultimos 6 meses",
+    "plan": {
+      "sql": "WITH LastSixMonths AS (SELECT strftime('%Y-%m', order_date) AS month FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY month) SELECT lsm.month, SUM(o.quantity) AS total_sales FROM LastSixMonths lsm JOIN orders o ON strftime('%Y-%m', o.order_date) = lsm.month JOIN products p ON o.product_id = p.product_id WHERE p.category = 'beuty' GROUP BY lsm.month",
+      "explain": "Esta consulta utiliza una CTE para obtener los meses de los últimos 6 meses y luego suma las ventas de productos de la categoría 'beuty' en esos meses, agrupando los resultados por mes.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Asegúrate de que la categoría esté correctamente escrita como 'beuty' en la base de datos, ya que es sensible a mayúsculas/minúsculas."
+    },
+    "sql": "WITH LastSixMonths AS (SELECT strftime('%Y-%m', order_date) AS month FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY month) SELECT lsm.month, SUM(o.quantity) AS total_sales FROM LastSixMonths lsm JOIN orders o ON strftime('%Y-%m', o.order_date) = lsm.month JOIN products p ON o.product_id = p.product_id WHERE p.category = 'beuty' GROUP BY lsm.month",
+    "df_head": [],
+    "error": null
+  },
+  {
+    "ts": 1757770035.862725,
+    "question": "cantidad de ventas Beauty de los ultimos 6 meses",
+    "plan": {
+      "sql": "WITH LastSixMonths AS (SELECT strftime('%Y-%m', order_date) AS month FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY month) SELECT lsm.month, SUM(o.quantity) AS total_sales FROM LastSixMonths lsm JOIN orders o ON lsm.month = strftime('%Y-%m', o.order_date) JOIN products p ON o.product_id = p.product_id WHERE p.category = 'Beauty' GROUP BY lsm.month",
+      "explain": "Esta consulta utiliza una CTE para obtener los meses de los últimos 6 meses y suma las ventas de productos de la categoría 'Beauty' en esos meses, agrupando los resultados por mes.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Asegúrate de que la categoría 'Beauty' esté escrita correctamente en la base de datos para obtener resultados precisos."
+    },
+    "sql": "WITH LastSixMonths AS (SELECT strftime('%Y-%m', order_date) AS month FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY month) SELECT lsm.month, SUM(o.quantity) AS total_sales FROM LastSixMonths lsm JOIN orders o ON lsm.month = strftime('%Y-%m', o.order_date) JOIN products p ON o.product_id = p.product_id WHERE p.category = 'Beauty' GROUP BY lsm.month",
+    "df_head": [
+      {
+        "month": "2025-03",
+        "total_sales": 82
+      },
+      {
+        "month": "2025-04",
+        "total_sales": 84
+      },
+      {
+        "month": "2025-05",
+        "total_sales": 95
+      },
+      {
+        "month": "2025-06",
+        "total_sales": 80
+      },
+      {
+        "month": "2025-07",
+        "total_sales": 82
+      },
+      {
+        "month": "2025-08",
+        "total_sales": 79
+      }
+    ],
+    "error": null
+  }
+]
