@@ -1,0 +1,22 @@
+[
+  {
+    "ts": 1757776990.948214,
+    "question": "cual es la categoria que menos  crecio en los ultimos 6 meses, o incluso que decrecio",
+    "plan": {
+      "sql": "WITH recent_orders AS (SELECT DISTINCT category, SUM(quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE order_date >= date('now', '-6 months') GROUP BY category), previous_orders AS (SELECT DISTINCT category, SUM(quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE order_date < date('now', '-6 months') GROUP BY category) SELECT r.category, (r.total_quantity - COALESCE(p.total_quantity, 0)) AS growth FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY growth ASC LIMIT 1",
+      "explain": "Esta consulta calcula la cantidad total de productos vendidos por categoría en los últimos 6 meses y en el período anterior, luego calcula el crecimiento y retorna la categoría con menor crecimiento.",
+      "viz_suggestion": {
+        "type": "none"
+      },
+      "notes": "La consulta retorna la categoría que menos creció o decreció en los últimos 6 meses."
+    },
+    "sql": "WITH recent_orders AS (SELECT DISTINCT category, SUM(quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE order_date >= date('now', '-6 months') GROUP BY category), previous_orders AS (SELECT DISTINCT category, SUM(quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE order_date < date('now', '-6 months') GROUP BY category) SELECT r.category, (r.total_quantity - COALESCE(p.total_quantity, 0)) AS growth FROM recent_orders r LEFT JOIN previous_orders p ON r.category = p.category ORDER BY growth ASC LIMIT 1",
+    "df_head": [
+      {
+        "category": "Books",
+        "growth": -1319
+      }
+    ],
+    "error": null
+  }
+]

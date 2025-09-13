@@ -1,0 +1,262 @@
+[
+  {
+    "ts": 1757777097.117978,
+    "question": "ventas en los ultimos 6 meses evolucion",
+    "plan": {
+      "sql": "WITH RecentSales AS (SELECT order_date, SUM(quantity) AS total_quantity FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY order_date) SELECT order_date, total_quantity FROM RecentSales ORDER BY order_date;",
+      "explain": "Esta consulta crea un CTE que agrega las ventas por fecha en los últimos 6 meses y luego selecciona esas fechas con las cantidades totales.",
+      "viz_suggestion": {
+        "type": "line"
+      },
+      "notes": "La evolución de las ventas se podrá visualizar en un gráfico de líneas, donde el eje X representará las fechas y el eje Y las cantidades vendidas."
+    },
+    "sql": "WITH RecentSales AS (SELECT order_date, SUM(quantity) AS total_quantity FROM orders WHERE order_date >= date('now', '-6 months') GROUP BY order_date) SELECT order_date, total_quantity FROM RecentSales ORDER BY order_date;",
+    "df_head": [
+      {
+        "order_date": "2025-03-13",
+        "total_quantity": 16
+      },
+      {
+        "order_date": "2025-03-14",
+        "total_quantity": 13
+      },
+      {
+        "order_date": "2025-03-15",
+        "total_quantity": 24
+      },
+      {
+        "order_date": "2025-03-16",
+        "total_quantity": 22
+      },
+      {
+        "order_date": "2025-03-17",
+        "total_quantity": 13
+      },
+      {
+        "order_date": "2025-03-18",
+        "total_quantity": 33
+      },
+      {
+        "order_date": "2025-03-19",
+        "total_quantity": 18
+      },
+      {
+        "order_date": "2025-03-20",
+        "total_quantity": 23
+      },
+      {
+        "order_date": "2025-03-21",
+        "total_quantity": 24
+      },
+      {
+        "order_date": "2025-03-22",
+        "total_quantity": 21
+      },
+      {
+        "order_date": "2025-03-23",
+        "total_quantity": 22
+      },
+      {
+        "order_date": "2025-03-24",
+        "total_quantity": 33
+      },
+      {
+        "order_date": "2025-03-25",
+        "total_quantity": 17
+      },
+      {
+        "order_date": "2025-03-26",
+        "total_quantity": 19
+      },
+      {
+        "order_date": "2025-03-27",
+        "total_quantity": 20
+      },
+      {
+        "order_date": "2025-03-28",
+        "total_quantity": 5
+      },
+      {
+        "order_date": "2025-03-29",
+        "total_quantity": 30
+      },
+      {
+        "order_date": "2025-03-30",
+        "total_quantity": 16
+      },
+      {
+        "order_date": "2025-03-31",
+        "total_quantity": 39
+      },
+      {
+        "order_date": "2025-04-01",
+        "total_quantity": 15
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777126.221267,
+    "question": "categoria mas vendida en los ultimos 6 meses",
+    "plan": {
+      "sql": "WITH RecentOrders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentOrders ORDER BY total_quantity DESC LIMIT 1",
+      "explain": "Esta consulta genera un CTE que suma la cantidad vendida por categoría en los últimos 6 meses, y luego selecciona la categoría con mayor cantidad vendida.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "La salida incluirá la categoría más vendida y su cantidad total."
+    },
+    "sql": "WITH RecentOrders AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentOrders ORDER BY total_quantity DESC LIMIT 1",
+    "df_head": [
+      {
+        "category": "Sports",
+        "total_quantity": 898
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777146.398485,
+    "question": "ranking de categorias mas vendidas ultimos 6 meses",
+    "plan": {
+      "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentSales ORDER BY total_quantity DESC",
+      "explain": "Esta consulta crea un CTE que suma la cantidad vendida por categoría en los últimos 6 meses y luego selecciona las categorías ordenadas por la cantidad total vendida en orden descendente.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Esta consulta proporciona un ranking de categorías más vendidas, lo que puede ser útil para análisis de ventas."
+    },
+    "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentSales ORDER BY total_quantity DESC",
+    "df_head": [
+      {
+        "category": "Sports",
+        "total_quantity": 898
+      },
+      {
+        "category": "Books",
+        "total_quantity": 761
+      },
+      {
+        "category": "Home",
+        "total_quantity": 738
+      },
+      {
+        "category": "Electronics",
+        "total_quantity": 508
+      },
+      {
+        "category": "Beauty",
+        "total_quantity": 485
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777159.3862069,
+    "question": "ranking de crecimiento de categorias mas vendidas ultimos 6 meses",
+    "plan": {
+      "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentSales ORDER BY total_quantity DESC",
+      "explain": "Esta consulta crea un CTE que suma la cantidad vendida por categoría en los últimos 6 meses y luego ordena las categorías por la cantidad total vendida en orden descendente.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "El ranking de crecimiento implica comparar con un período anterior, la consulta actual solo proporciona las cantidades vendidas sin la comparación necesaria para el crecimiento."
+    },
+    "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category) SELECT category, total_quantity FROM RecentSales ORDER BY total_quantity DESC",
+    "df_head": [
+      {
+        "category": "Sports",
+        "total_quantity": 898
+      },
+      {
+        "category": "Books",
+        "total_quantity": 761
+      },
+      {
+        "category": "Home",
+        "total_quantity": 738
+      },
+      {
+        "category": "Electronics",
+        "total_quantity": 508
+      },
+      {
+        "category": "Beauty",
+        "total_quantity": 485
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777193.063195,
+    "question": "ranking de % de crecimiento de ventas de categorias ultimos 6 meses",
+    "plan": {
+      "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category), PreviousSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < date('now', '-6 months') GROUP BY p.category) SELECT rs.category, ((rs.total_quantity - ps.total_quantity) / NULLIF(ps.total_quantity, 0)) * 100 AS growth_percentage FROM RecentSales rs LEFT JOIN PreviousSales ps ON rs.category = ps.category ORDER BY growth_percentage DESC",
+      "explain": "Esta consulta calcula el crecimiento porcentual de las ventas por categoría en los últimos 6 meses comparándolo con el mismo periodo anterior. Utiliza dos CTEs para obtener las cantidades vendidas en ambos periodos y luego calcula el porcentaje de crecimiento.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "El uso de NULLIF previene divisiones por cero al calcular el porcentaje de crecimiento."
+    },
+    "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category), PreviousSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < date('now', '-6 months') GROUP BY p.category) SELECT rs.category, ((rs.total_quantity - ps.total_quantity) / NULLIF(ps.total_quantity, 0)) * 100 AS growth_percentage FROM RecentSales rs LEFT JOIN PreviousSales ps ON rs.category = ps.category ORDER BY growth_percentage DESC",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Books",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Electronics",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Home",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Sports",
+        "growth_percentage": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777215.1400409,
+    "question": "ranking de % de crecimiento de ventas de categorias",
+    "plan": {
+      "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category), PreviousSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < date('now', '-6 months') AND o.order_date >= date('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - COALESCE(p.total_quantity, 0)) / COALESCE(p.total_quantity, 1)) * 100 AS growth_percentage FROM RecentSales r LEFT JOIN PreviousSales p ON r.category = p.category ORDER BY growth_percentage DESC;",
+      "explain": "Esta consulta calcula el crecimiento porcentual de las ventas por categoría, comparando las ventas de los últimos 6 meses con el mismo periodo del año anterior. Utiliza dos CTEs para obtener las cantidades vendidas en ambos periodos y calcular el porcentaje de crecimiento.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Asegúrate de que existen datos de ventas en ambos periodos para un cálculo preciso del crecimiento."
+    },
+    "sql": "WITH RecentSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY p.category), PreviousSales AS (SELECT p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date < date('now', '-6 months') AND o.order_date >= date('now', '-12 months') GROUP BY p.category) SELECT r.category, ((r.total_quantity - COALESCE(p.total_quantity, 0)) / COALESCE(p.total_quantity, 1)) * 100 AS growth_percentage FROM RecentSales r LEFT JOIN PreviousSales p ON r.category = p.category ORDER BY growth_percentage DESC;",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Books",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Electronics",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Home",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Sports",
+        "growth_percentage": 0
+      }
+    ],
+    "error": null
+  }
+]

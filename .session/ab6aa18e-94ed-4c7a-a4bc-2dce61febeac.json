@@ -1,0 +1,234 @@
+[
+  {
+    "ts": 1757777288.7314198,
+    "question": "ranking de ventas por pais ultimos 6 meses",
+    "plan": {
+      "sql": "SELECT c.country, SUM(o.quantity * p.price) AS total_sales FROM orders o JOIN customers c ON o.customer_id = c.customer_id JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY c.country ORDER BY total_sales DESC;",
+      "explain": "Esta consulta suma las ventas totales por país en los últimos 6 meses, utilizando las tablas de pedidos, clientes y productos y agrupando por país.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Los resultados mostrarán el total de ventas por país durante el periodo especificado."
+    },
+    "sql": "SELECT c.country, SUM(o.quantity * p.price) AS total_sales FROM orders o JOIN customers c ON o.customer_id = c.customer_id JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY c.country ORDER BY total_sales DESC;",
+    "df_head": [
+      {
+        "country": "AR",
+        "total_sales": 172686.08000000002
+      },
+      {
+        "country": "CO",
+        "total_sales": 152724.37
+      },
+      {
+        "country": "PE",
+        "total_sales": 150744.19
+      },
+      {
+        "country": "MX",
+        "total_sales": 146864.96
+      },
+      {
+        "country": "CL",
+        "total_sales": 145274.79
+      },
+      {
+        "country": "UY",
+        "total_sales": 140029.7
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777310.583415,
+    "question": "categoria mas vendida por pais",
+    "plan": {
+      "sql": "SELECT c.country, p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN customers c ON o.customer_id = c.customer_id JOIN products p ON o.product_id = p.product_id GROUP BY c.country, p.category ORDER BY total_quantity DESC",
+      "explain": "Esta consulta suma la cantidad total de productos vendidos, agrupando por país y categoría, y ordena los resultados de mayor a menor cantidad vendida.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "La consulta devuelve la categoría más vendida por país y puede ser visualizada en un gráfico de barras."
+    },
+    "sql": "SELECT c.country, p.category, SUM(o.quantity) AS total_quantity FROM orders o JOIN customers c ON o.customer_id = c.customer_id JOIN products p ON o.product_id = p.product_id GROUP BY c.country, p.category ORDER BY total_quantity DESC",
+    "df_head": [
+      {
+        "country": "AR",
+        "category": "Books",
+        "total_quantity": 571
+      },
+      {
+        "country": "AR",
+        "category": "Home",
+        "total_quantity": 528
+      },
+      {
+        "country": "AR",
+        "category": "Sports",
+        "total_quantity": 526
+      },
+      {
+        "country": "CL",
+        "category": "Sports",
+        "total_quantity": 513
+      },
+      {
+        "country": "MX",
+        "category": "Sports",
+        "total_quantity": 494
+      },
+      {
+        "country": "PE",
+        "category": "Books",
+        "total_quantity": 492
+      },
+      {
+        "country": "CL",
+        "category": "Home",
+        "total_quantity": 486
+      },
+      {
+        "country": "MX",
+        "category": "Home",
+        "total_quantity": 486
+      },
+      {
+        "country": "UY",
+        "category": "Books",
+        "total_quantity": 475
+      },
+      {
+        "country": "CO",
+        "category": "Books",
+        "total_quantity": 471
+      },
+      {
+        "country": "PE",
+        "category": "Home",
+        "total_quantity": 471
+      },
+      {
+        "country": "UY",
+        "category": "Sports",
+        "total_quantity": 443
+      },
+      {
+        "country": "MX",
+        "category": "Books",
+        "total_quantity": 442
+      },
+      {
+        "country": "AR",
+        "category": "Beauty",
+        "total_quantity": 432
+      },
+      {
+        "country": "PE",
+        "category": "Sports",
+        "total_quantity": 432
+      },
+      {
+        "country": "CO",
+        "category": "Sports",
+        "total_quantity": 422
+      },
+      {
+        "country": "CL",
+        "category": "Books",
+        "total_quantity": 390
+      },
+      {
+        "country": "CO",
+        "category": "Home",
+        "total_quantity": 387
+      },
+      {
+        "country": "UY",
+        "category": "Home",
+        "total_quantity": 381
+      },
+      {
+        "country": "AR",
+        "category": "Electronics",
+        "total_quantity": 333
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777346.690742,
+    "question": "% de crecimiento del ultimo mes en cada categoria",
+    "plan": {
+      "sql": "WITH last_month_sales AS (SELECT p.category, SUM(o.quantity) AS last_month_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-1 month') GROUP BY p.category), previous_month_sales AS (SELECT p.category, SUM(o.quantity) AS previous_month_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-2 months') AND o.order_date < date('now', '-1 month') GROUP BY p.category) SELECT lm.category, ((lm.last_month_quantity - pm.previous_month_quantity) / pm.previous_month_quantity) * 100 AS growth_percentage FROM last_month_sales lm JOIN previous_month_sales pm ON lm.category = pm.category",
+      "explain": "Esta consulta calcula el porcentaje de crecimiento en ventas por categoría en el último mes en comparación con el mes anterior, usando CTEs para almacenar las cantidades vendidas en cada mes.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Asegúrate de que haya datos para ambos meses para evitar división por cero."
+    },
+    "sql": "WITH last_month_sales AS (SELECT p.category, SUM(o.quantity) AS last_month_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-1 month') GROUP BY p.category), previous_month_sales AS (SELECT p.category, SUM(o.quantity) AS previous_month_quantity FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-2 months') AND o.order_date < date('now', '-1 month') GROUP BY p.category) SELECT lm.category, ((lm.last_month_quantity - pm.previous_month_quantity) / pm.previous_month_quantity) * 100 AS growth_percentage FROM last_month_sales lm JOIN previous_month_sales pm ON lm.category = pm.category",
+    "df_head": [
+      {
+        "category": "Beauty",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Books",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Electronics",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Home",
+        "growth_percentage": 0
+      },
+      {
+        "category": "Sports",
+        "growth_percentage": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757777384.604782,
+    "question": "evolucion de ventas de los ultimos 6 meses",
+    "plan": {
+      "sql": "SELECT strftime('%Y-%m', o.order_date) AS month, SUM(o.quantity * p.price) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY month ORDER BY month",
+      "explain": "Esta consulta agrupa las ventas totales por mes durante los últimos 6 meses, multiplicando las cantidades de productos vendidos por su precio.",
+      "viz_suggestion": {
+        "type": "line"
+      },
+      "notes": "La consulta muestra la evolución de ventas mensuales, ideal para un gráfico de líneas."
+    },
+    "sql": "SELECT strftime('%Y-%m', o.order_date) AS month, SUM(o.quantity * p.price) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id WHERE o.order_date >= date('now', '-6 months') GROUP BY month ORDER BY month",
+    "df_head": [
+      {
+        "month": "2025-03",
+        "total_sales": 114107.36
+      },
+      {
+        "month": "2025-04",
+        "total_sales": 154004.35
+      },
+      {
+        "month": "2025-05",
+        "total_sales": 151132.73
+      },
+      {
+        "month": "2025-06",
+        "total_sales": 183629.0
+      },
+      {
+        "month": "2025-07",
+        "total_sales": 175903.81
+      },
+      {
+        "month": "2025-08",
+        "total_sales": 129546.84
+      }
+    ],
+    "error": null
+  }
+]

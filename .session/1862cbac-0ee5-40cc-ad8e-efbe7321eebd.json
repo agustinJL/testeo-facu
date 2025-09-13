@@ -1,0 +1,210 @@
+[
+  {
+    "ts": 1757771359.912818,
+    "question": "ventas por mes",
+    "plan": {
+      "sql": "SELECT strftime('%Y-%m', order_date) AS month, SUM(quantity) AS total_sales FROM orders GROUP BY month ORDER BY month;",
+      "explain": "Esta consulta agrupa las ventas mensuales sumando la cantidad de productos vendidos en cada mes, utilizando la función strftime para extraer el año y el mes de la fecha del pedido.",
+      "viz_suggestion": {
+        "type": "line"
+      },
+      "notes": "Se asume que 'quantity' en la tabla 'orders' representa la cantidad de productos vendidos. Asegúrate de que la fecha esté en un formato compatible para el uso de strftime."
+    },
+    "sql": "SELECT strftime('%Y-%m', order_date) AS month, SUM(quantity) AS total_sales FROM orders GROUP BY month ORDER BY month;",
+    "df_head": [
+      {
+        "month": "2024-01",
+        "total_sales": 661
+      },
+      {
+        "month": "2024-02",
+        "total_sales": 540
+      },
+      {
+        "month": "2024-03",
+        "total_sales": 617
+      },
+      {
+        "month": "2024-04",
+        "total_sales": 617
+      },
+      {
+        "month": "2024-05",
+        "total_sales": 614
+      },
+      {
+        "month": "2024-06",
+        "total_sales": 579
+      },
+      {
+        "month": "2024-07",
+        "total_sales": 513
+      },
+      {
+        "month": "2024-08",
+        "total_sales": 605
+      },
+      {
+        "month": "2024-09",
+        "total_sales": 605
+      },
+      {
+        "month": "2024-10",
+        "total_sales": 594
+      },
+      {
+        "month": "2024-11",
+        "total_sales": 635
+      },
+      {
+        "month": "2024-12",
+        "total_sales": 602
+      },
+      {
+        "month": "2025-01",
+        "total_sales": 564
+      },
+      {
+        "month": "2025-02",
+        "total_sales": 556
+      },
+      {
+        "month": "2025-03",
+        "total_sales": 602
+      },
+      {
+        "month": "2025-04",
+        "total_sales": 607
+      },
+      {
+        "month": "2025-05",
+        "total_sales": 568
+      },
+      {
+        "month": "2025-06",
+        "total_sales": 671
+      },
+      {
+        "month": "2025-07",
+        "total_sales": 653
+      },
+      {
+        "month": "2025-08",
+        "total_sales": 483
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757771377.184473,
+    "question": "ranking de ventas por categoria",
+    "plan": {
+      "sql": "SELECT p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category ORDER BY total_sales DESC;",
+      "explain": "Esta consulta suma la cantidad de productos vendidos por categoría y los ordena en forma descendente para mostrar el ranking de ventas por categoría.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Los resultados mostrarán las categorías con mayores ventas al principio."
+    },
+    "sql": "SELECT p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY p.category ORDER BY total_sales DESC;",
+    "df_head": [
+      {
+        "category": "Books",
+        "total_sales": 2841
+      },
+      {
+        "category": "Sports",
+        "total_sales": 2830
+      },
+      {
+        "category": "Home",
+        "total_sales": 2739
+      },
+      {
+        "category": "Beauty",
+        "total_sales": 1868
+      },
+      {
+        "category": "Electronics",
+        "total_sales": 1608
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757771393.350194,
+    "question": "ranking de crecimiento de ventas por categoria",
+    "plan": {
+      "sql": "WITH monthly_sales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT category, (SUM(CASE WHEN month = (SELECT MAX(month) FROM monthly_sales) THEN total_sales ELSE 0 END) - SUM(CASE WHEN month = (SELECT MIN(month) FROM monthly_sales) THEN total_sales ELSE 0 END)) AS growth FROM monthly_sales GROUP BY category ORDER BY growth DESC;",
+      "explain": "Esta consulta calcula el crecimiento de ventas por categoría al restar las ventas del mes más antiguo de las del mes más reciente, agrupando los resultados por categoría y ordenándolos en forma descendente.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "El crecimiento se obtienen comparando las ventas del primer y último mes."
+    },
+    "sql": "WITH monthly_sales AS (SELECT strftime('%Y-%m', o.order_date) AS month, p.category, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id GROUP BY month, p.category) SELECT category, (SUM(CASE WHEN month = (SELECT MAX(month) FROM monthly_sales) THEN total_sales ELSE 0 END) - SUM(CASE WHEN month = (SELECT MIN(month) FROM monthly_sales) THEN total_sales ELSE 0 END)) AS growth FROM monthly_sales GROUP BY category ORDER BY growth DESC;",
+    "df_head": [
+      {
+        "category": "Electronics",
+        "growth": -20
+      },
+      {
+        "category": "Beauty",
+        "growth": -25
+      },
+      {
+        "category": "Sports",
+        "growth": -26
+      },
+      {
+        "category": "Books",
+        "growth": -53
+      },
+      {
+        "category": "Home",
+        "growth": -54
+      }
+    ],
+    "error": null
+  },
+  {
+    "ts": 1757771426.534858,
+    "question": "ventas de Home de los ultimos 6 meses",
+    "plan": {
+      "sql": "SELECT strftime('%Y-%m', o.order_date) AS month, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id WHERE p.category = 'Home' AND o.order_date >= date('now', '-6 months') GROUP BY month ORDER BY month;",
+      "explain": "Esta consulta obtiene las ventas mensuales de la categoría 'Home' en los últimos 6 meses, sumando la cantidad de productos vendidos, agrupando por mes.",
+      "viz_suggestion": {
+        "type": "bar"
+      },
+      "notes": "Asegúrate de que la categoría 'Home' esté correctamente nombrada en la tabla de productos."
+    },
+    "sql": "SELECT strftime('%Y-%m', o.order_date) AS month, SUM(o.quantity) AS total_sales FROM orders o JOIN products p ON o.product_id = p.product_id WHERE p.category = 'Home' AND o.order_date >= date('now', '-6 months') GROUP BY month ORDER BY month;",
+    "df_head": [
+      {
+        "month": "2025-03",
+        "total_sales": 90
+      },
+      {
+        "month": "2025-04",
+        "total_sales": 117
+      },
+      {
+        "month": "2025-05",
+        "total_sales": 127
+      },
+      {
+        "month": "2025-06",
+        "total_sales": 148
+      },
+      {
+        "month": "2025-07",
+        "total_sales": 150
+      },
+      {
+        "month": "2025-08",
+        "total_sales": 106
+      }
+    ],
+    "error": null
+  }
+]
