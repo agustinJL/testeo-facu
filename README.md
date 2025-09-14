@@ -11,6 +11,8 @@
 
 ## ✨ Demo (qué hace)
 
+![Demo Guzzito Analyst](docs/guzzito-analyst.gif)
+
 - “ventas por categoría por mes” → genera SQL + gráfico de líneas  
 - “top 10 productos por revenue” → ranking con barras  
 - “evolución mensual AR vs MX” → serie por país  
