@@ -2,7 +2,7 @@ import os, uuid
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent_core import answer, load_session  # historia en disco
+from agent_core import answer, load_session, refine_question_step  # <-- + refine
 from tools_sql import get_schema, get_foreign_keys, table_row_count, sample_rows
 
 # ============ Config ============
@@ -16,6 +16,10 @@ if "session_id" not in st.session_state:
 # Resultados completos para render inmediato (df/chart_bytes)
 if "results" not in st.session_state:
     st.session_state["results"] = []
+
+# Estado del refinamiento iterativo
+if "refine" not in st.session_state:
+    st.session_state["refine"] = None
 
 # ============ Utils: diagrama ============
 def build_schema_dot(schema: dict, fks: list) -> str:
@@ -89,30 +93,6 @@ with st.sidebar:
         st.session_state["story"] = []
         st.rerun()
 
-    # (Opcional) Borrar historial persistido + resultados en memoria
-    # from agent_core import clear_session
-    # if st.button("🗑️ Borrar historial de esta sesión", key="wipe_hist_btn"):
-    #     clear_session(st.session_state["session_id"])
-    #     st.session_state["story"] = []
-    #     st.session_state["results"] = []
-    #     for idx in range(len(disk_history)):
-    #         st.session_state.pop(f"pick_{idx}", None)
-    #     st.rerun()
-
-    # (Opcional) Nueva sesión limpia
-    # if st.button("🆕 Nueva sesión", key="new_sess_btn"):
-    #     import uuid
-    #     st.session_state["session_id"] = str(uuid.uuid4())
-    #     st.session_state["story"] = []
-    #     st.session_state["results"] = []
-    #     for k in list(st.session_state.keys()):
-    #         if str(k).startswith("pick_"):
-    #             st.session_state.pop(k, None)
-    #     st.rerun()
-
-
-
-
 # ============ Título & Esquema visual ============
 st.title("🧠📊 Data Analyst Agent")
 
@@ -136,43 +116,153 @@ with st.expander("🔎 Esquema de la base (visual y navegable)", expanded=False)
             with st.expander(f"Preview: {t} (5 filas)"):
                 st.dataframe(sample_rows(t, 5))
 
-# ============ Input ============
-q = st.text_input("Preguntale a la base (ej: ventas por categoría por mes):", "")
-run = st.button("Ejecutar", type="primary")
+# ============ Refinamiento iterativo (opcional) ============
+st.subheader("🗣️ Refinamiento iterativo (opcional)")
+schema_cached, _ = _cached_schema()
 
-# ============ Acción ============
+user_q = st.text_input("Planteá tu pregunta de negocio:", key="user_q")
+
+cols_ref = st.columns([1,1,1])
+if cols_ref[0].button("🔍 Empezar a refinar", key="start_refine_btn") and user_q.strip():
+    base_q = user_q.strip()
+    step = refine_question_step(
+        base_question=base_q,
+        schema=schema_cached,
+        session_id=st.session_state["session_id"]
+    )
+    st.session_state["refine"] = {
+        "original": base_q,
+        "current": step.get("refined_question", base_q),
+        "steps": [step],
+        "user_choices": [],
+        "done": False,
+    }
+    st.rerun()
+
+# Panel interactivo si hay refinamiento activo
+if st.session_state["refine"]:
+    R = st.session_state["refine"]
+    st.caption("Editá la pregunta refinada, elegí aclaraciones sugeridas y refiná de nuevo. Ejecutá cuando estés conforme.")
+    st.text_area("Pregunta refinada (editable):", value=R["current"], key="refined_edit", height=90)
+
+    last = R["steps"][-1]
+    sugg = last.get("clarifications", []) or []
+    chosen = []
+    if sugg:
+        st.write("**Aclaraciones sugeridas (tildá las que apliquen):**")
+        for i, s in enumerate(sugg):
+            if st.checkbox(s, key=f"clar_{len(R['steps'])}_{i}"):
+                chosen.append(s)
+
+    extra = st.text_input("Agregar alguna aclaración propia (opcional):", key=f"extra_{len(R['steps'])}")
+
+    c1, c2, c3 = st.columns([1,1,1])
+    if c1.button("➕ Refinar con estas aclaraciones", key=f"refine_again_{len(R['steps'])}"):
+        if extra.strip():
+            chosen.append(extra.strip())
+        step = refine_question_step(
+            base_question=R["current"],
+            schema=schema_cached,
+            session_id=st.session_state["session_id"],
+            user_selected_clarifications=chosen,
+            user_edited_question=st.session_state["refined_edit"]
+        )
+        R["user_choices"].extend(chosen)
+        R["current"] = step.get("refined_question", st.session_state["refined_edit"])
+        R["steps"].append(step)
+        st.session_state["refine"] = R
+        st.rerun()
+
+    if c2.button("✅ Ejecutar ahora", key=f"exec_now_{len(R['steps'])}"):
+        with st.spinner("Generando SQL y ejecutando..."):
+            res = answer(R["current"], session_id=st.session_state["session_id"])
+            st.session_state["results"].append(res)
+        st.session_state["refine"] = None
+        st.rerun()
+
+    if c3.button("🧹 Reiniciar refinamiento", key=f"reset_refine_{len(R['steps'])}"):
+        st.session_state["refine"] = None
+        st.rerun()
+
+    # Info de confianza
+    conf = float(last.get("confidence", 0.0))
+    if conf >= 0.75:
+        st.info("La confianza del agente es alta. Si estás conforme, podés **Ejecutar ahora**.")
+
+    # Timeline de pasos
+    with st.expander("Ver pasos de refinamiento"):
+        for idx, s in enumerate(R["steps"], 1):
+            st.markdown(f"**Paso {idx}** — Confianza: {int(100*s.get('confidence',0))}%")
+            st.write("Refinada:", s.get("refined_question",""))
+            if s.get("assumptions"):
+                st.caption("Supuestos de este paso:")
+                for a in s["assumptions"]:
+                    st.write(f"• {a}")
+            st.divider()
+
+# ============ Ejecución directa (salteando refinamiento) ============
+st.subheader("⚡ Ejecución rápida (saltear refinamiento)")
+q = st.text_input("Preguntale a la base (ej: ventas por categoría por mes):", "", key="direct_q")
+run = st.button("Ejecutar", type="primary", key="direct_run_btn")
+
 if run and q.strip():
     with st.spinner("Pensando y consultando..."):
         res = answer(q, session_id=st.session_state["session_id"])
-        st.session_state["results"].append(res)  # guardamos para render
+        st.session_state["results"].append(res)
 
 # ============ Render de resultados ============
 for i, res in enumerate(reversed(st.session_state["results"]), 1):
-    st.markdown(f"### Resultado #{i}")
-    st.code(res.get("sql", ""), language="sql")
 
-    if res.get("error"):
-        st.error(f"Error: {res['error']}")
-        if res.get("plan", {}).get("explain"):
-            with st.expander("Explicación del plan (del modelo)", expanded=False):
-                st.write(res["plan"]["explain"])
-        continue
+    # --- Mostrar refinamiento de la pregunta usada ---
+    ref = res.get("refinement", {}) or {}
+    q_orig = res.get("question_original", "")
+    q_ref = res.get("question_refined", "")
 
-    st.write(res.get("plan", {}).get("explain", ""))
+    with st.expander("🎯 Pregunta (refinada)", expanded=True):
+        if q_orig and q_ref and q_orig != q_ref:
+            st.markdown(f"**Original:** {q_orig}")
+            st.markdown(f"**Refinada:** {q_ref}")
+        else:
+            st.markdown(f"**Pregunta:** {q_ref or q_orig}")
 
-    if res.get("df") is not None and not res["df"].empty:
-        st.dataframe(res["df"].head(50), key=f"df_{i}")
-        csv_bytes = res["df"].to_csv(index=False).encode()
-        st.download_button(
-            "Descargar CSV",
-            data=csv_bytes,
-            file_name=f"resultado_{i}.csv",
-            mime="text/csv",
-            key=f"dl_{i}"
-        )
+        if ref.get("clarifications"):
+            st.caption("Posibles aclaraciones:")
+            for c in ref["clarifications"]:
+                st.write(f"• {c}")
 
-    if res.get("chart_bytes"):
-        st.image(res["chart_bytes"], caption="Visualización sugerida")  # sin key
+        if ref.get("assumptions"):
+            st.caption("Supuestos usados:")
+            for a in ref["assumptions"]:
+                st.write(f"• {a}")
 
-    with st.expander("Notas / supuestos", expanded=False):
-        st.write(res.get("plan", {}).get("notes", ""))
+        if "confidence" in ref:
+            st.caption(f"Confianza del agente: {round(float(ref['confidence'])*100):d}%")
+
+        st.markdown(f"### Resultado #{i}")
+        st.code(res.get("sql", ""), language="sql")
+
+        if res.get("error"):
+            st.error(f"Error: {res['error']}")
+            if res.get("plan", {}).get("explain"):
+                with st.expander("Explicación del plan (del modelo)", expanded=False):
+                    st.write(res["plan"]["explain"])
+            continue
+
+        st.write(res.get("plan", {}).get("explain", ""))
+
+        if res.get("df") is not None and not res["df"].empty:
+            st.dataframe(res["df"].head(50), key=f"df_{i}")
+            csv_bytes = res["df"].to_csv(index=False).encode()
+            st.download_button(
+                "Descargar CSV",
+                data=csv_bytes,
+                file_name=f"resultado_{i}.csv",
+                mime="text/csv",
+                key=f"dl_{i}"
+            )
+
+        if res.get("chart_bytes"):
+            st.image(res["chart_bytes"], caption="Visualización sugerida")
+
+        with st.expander("Notas / supuestos", expanded=False):
+            st.write(res.get("plan", {}).get("notes", ""))

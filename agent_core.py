@@ -39,6 +39,114 @@ def summarize_for_context(history: list, max_items: int = 4) -> str:
         bullets.append(f"- Q: {q}\n  SQL: {sql}\n  Insight: {insight}")
     return "\n".join(bullets)
 
+
+
+# --- Prompt corto para refinar preguntas ---
+REFINE_SYSTEM = """Eres un PM/BI senior. Tu tarea es ayudar a un analista a
+formular una pregunta clara, medible y libre de ambigüedades antes de generar SQL.
+Debes devolver SOLO JSON válido, con estos campos:
+- refined_question: string breve y precisa (sin sesgo).
+- clarifications: lista[str] con preguntas de aclaración razonables (máx 3).
+- assumptions: lista[str] con supuestos seguros si falta info (máx 3).
+- confidence: float 0..1 (qué tan seguro estás de que ya es ejecutable).
+"""
+
+def refine_question_step(
+    base_question: str,
+    schema: dict,
+    session_id: str,
+    user_selected_clarifications: list[str] | None = None,
+    user_edited_question: str | None = None,
+) -> dict:
+    """
+    Un paso de refinamiento. Si el usuario eligió aclaraciones o editó la pregunta,
+    el LLM las considera y devuelve una nueva sugerencia.
+
+    Returns JSON:
+    {
+      "refined_question": str,
+      "clarifications": [str, ...],
+      "assumptions": [str, ...],
+      "confidence": float(0..1),
+      "notes": str (opcional)
+    }
+    """
+    user_selected_clarifications = user_selected_clarifications or []
+    effective_question = user_edited_question.strip() if user_edited_question else base_question
+
+    guidance = {
+        "base_question": base_question,
+        "effective_question": effective_question,
+        "user_selected_clarifications": user_selected_clarifications,
+    }
+
+    short_ctx = summarize_for_context(load_session(session_id))
+    messages = [
+        {
+            "role": "system",
+            "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")
+        },
+        {
+            "role": "user",
+            "content": (
+                "Refina de manera iterativa. Responde SOLO con un objeto JSON. "
+                "Si el usuario agregó aclaraciones, incorpóralas en la versión refinada.\n\n"
+                f"Esquema (JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
+                f"Instrucciones de usuario (JSON):\n{json.dumps(guidance, ensure_ascii=False)}"
+            )
+        }
+    ]
+
+    resp = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        response_format={"type": "json_object"},
+    )
+    out = json.loads(resp.choices[0].message.content)
+    out.setdefault("refined_question", effective_question)
+    out.setdefault("clarifications", [])
+    out.setdefault("assumptions", [])
+    out.setdefault("confidence", 0.0)
+    return out
+
+
+def refine_question(user_question: str, schema: dict, session_id: str) -> dict:
+    """
+    Devuelve un objeto JSON:
+    {
+      "refined_question": "...",
+      "clarifications": ["...","..."],
+      "assumptions": ["..."],
+      "confidence": 0.0..1.0
+    }
+    """
+    # contexto breve (reutilizamos el tuyo)
+    short_ctx = summarize_for_context(load_session(session_id))
+    messages = [
+        {"role": "system", "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
+        {"role": "user", "content": (
+            "Responde SOLO en JSON (json estricto). No incluyas texto fuera del objeto JSON.\n"
+            "Esquema disponible (JSON):\n"
+            f"{json.dumps(schema, ensure_ascii=False)}\n\n"
+            f"Pregunta del usuario:\n{user_question}\n"
+        )}
+    ]
+    resp = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        response_format={"type": "json_object"}
+    )
+    out = json.loads(resp.choices[0].message.content)
+
+    # saneamos claves mínimas
+    out.setdefault("refined_question", user_question)
+    out.setdefault("clarifications", [])
+    out.setdefault("assumptions", [])
+    out.setdefault("confidence", 0.0)
+    return out
+
+
+
 # ========= LLM setup =========
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -131,20 +239,31 @@ def make_chart(df: pd.DataFrame, viz: dict):
     return buf
 
 # ========= Orquestación / Respuesta =========
-def answer(user_question: str, session_id: str):
+
+def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
     schema = get_schema()
-    plan = plan_query(user_question, schema, session_id)
+
+    # 1) Refinar la pregunta (nuevo paso)
+    refinement = refine_question(user_question, schema, session_id)
+    final_question = refinement.get("refined_question") or user_question
+    if not auto_use_refined:
+        final_question = user_question  # por si querés desactivar en algún llamado
+
+    # 2) Planificar sobre la pregunta final (tu paso original)
+    plan = plan_query(final_question, schema, session_id)
     sql = plan.get("sql", "")
 
     try:
         df = run_sql(sql)
         chart = make_chart(df, plan.get("viz_suggestion", {}))
 
-        # Guardar en historial
+        # Guardar en historial (extendido)
         hist = load_session(session_id)
         hist.append({
             "ts": time.time(),
-            "question": user_question,
+            "question_original": user_question,
+            "question_refined": final_question,
+            "refinement": refinement,             # <-- lo guardamos completo
             "plan": plan,
             "sql": sql,
             "df_head": df.head(20).to_dict(orient="records"),
@@ -153,18 +272,24 @@ def answer(user_question: str, session_id: str):
         save_session(session_id, hist)
 
         return {
+            "question_original": user_question,
+            "question_refined": final_question,
+            "refinement": refinement,
             "plan": plan,
             "sql": sql,
             "df": df,
             "chart_bytes": chart.read() if chart else None,
             "error": None,
         }
+
     except Exception as e:
-        # Guardar igualmente el intento fallido
+        # Guardar intento fallido con refinamiento
         hist = load_session(session_id)
         hist.append({
             "ts": time.time(),
-            "question": user_question,
+            "question_original": user_question,
+            "question_refined": final_question,
+            "refinement": refinement,
             "plan": plan,
             "sql": sql,
             "df_head": None,
@@ -173,12 +298,18 @@ def answer(user_question: str, session_id: str):
         save_session(session_id, hist)
 
         return {
+            "question_original": user_question,
+            "question_refined": final_question,
+            "refinement": refinement,
             "plan": plan,
             "sql": sql,
             "df": None,
             "chart_bytes": None,
             "error": str(e),
         }
+
+
+
 
 
 def clear_session(session_id: str):
