@@ -14,6 +14,7 @@ toy.db
 .env
 *.env
 .streamlit/
+create_roadmap_issues.sh
 
 # macOS
 .DS_Store
