@@ -18,3 +18,8 @@ toy.db
 # macOS
 .DS_Store
 
+.venv/
+__pycache__/
+*.pyc
+.env
+.session/
