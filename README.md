@@ -32,7 +32,7 @@
 │ └─ system_sql_analyst.md # prompt del analista SQL
 ├─ .session/ # historial persistido por sesión
 ├─ requirements.txt
-├─ .env.example
+├─ .env
 └─ .gitignore
 ```
 
