@@ -33,13 +33,67 @@ def summarize_for_context(history: list, max_items: int = 4) -> str:
     tail = history[-max_items:]
     bullets = []
     for h in tail:
-        q = (h.get("question", "") or "")[:220]
+        # compat: usa refinada si existe
+        q = (h.get("question_refined") or h.get("question") or "")[:220]
         sql = (h.get("sql", "") or "").replace("\n", " ")[:220]
         insight = (h.get("plan", {}).get("explain", "") or "")[:240]
         bullets.append(f"- Q: {q}\n  SQL: {sql}\n  Insight: {insight}")
     return "\n".join(bullets)
 
+# === Sugeridor de preguntas (business-friendly) ===
+SUGGEST_SYSTEM = """Eres un analista de negocio senior.
+Dado un ESQUEMA de base de datos y (opcional) un inicio de pregunta del usuario,
+propón entre 3 y 6 preguntas útiles, claras y accionables.
+Devuelve SOLO JSON con una lista bajo 'suggestions', donde cada item es:
+- question: string (una pregunta lista para ejecutar/refinar)
+- why: string (por qué es útil)
+- tags: lista corta de etiquetas (p.ej., ["ventas","mensual"])
 
+Evita jerga técnica, sé concreto y con foco en negocio.
+"""
+
+def suggest_questions(schema: dict, partial: str | None = None, k: int = 5) -> list[dict]:
+    """
+    Retorna una lista de sugerencias [{question, why, tags}, ...]
+    """
+    user_content = {
+        "schema": schema,
+        "partial": (partial or "").strip(),
+        "k": max(3, min(int(k), 8)),
+    }
+    messages = [
+        {"role": "system", "content": SUGGEST_SYSTEM},
+        {"role": "user", "content": "Responde SOLO en JSON (json estricto)."},
+        {"role": "user", "content": json.dumps(user_content, ensure_ascii=False)}
+    ]
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.3,
+        )
+        data = json.loads(resp.choices[0].message.content)
+        suggestions = data.get("suggestions", []) or []
+        # saneo mínimo
+        out = []
+        for s in suggestions:
+            q = (s.get("question") or "").strip()  # <-- () faltaban
+            if not q:
+                continue
+            out.append({
+                "question": q,
+                "why": (s.get("why") or "").strip(),
+                "tags": s.get("tags") or [],
+            })
+        return out[:k]
+    except Exception:
+        # fallback simple si el modelo falla
+        return [
+            {"question":"ventas por categoría por mes", "why":"tendencia básica por mix", "tags":["ventas","categoría","mensual"]},
+            {"question":"top 10 productos por revenue", "why":"ranking de contribución", "tags":["top","producto","revenue"]},
+            {"question":"evolución mensual por país", "why":"comparar mercados", "tags":["evolución","país","mensual"]},
+        ][:k]
 
 # --- Prompt corto para refinar preguntas ---
 REFINE_SYSTEM = """Eres un PM/BI senior. Tu tarea es ayudar a un analista a
@@ -61,15 +115,6 @@ def refine_question_step(
     """
     Un paso de refinamiento. Si el usuario eligió aclaraciones o editó la pregunta,
     el LLM las considera y devuelve una nueva sugerencia.
-
-    Returns JSON:
-    {
-      "refined_question": str,
-      "clarifications": [str, ...],
-      "assumptions": [str, ...],
-      "confidence": float(0..1),
-      "notes": str (opcional)
-    }
     """
     user_selected_clarifications = user_selected_clarifications or []
     effective_question = user_edited_question.strip() if user_edited_question else base_question
@@ -82,19 +127,13 @@ def refine_question_step(
 
     short_ctx = summarize_for_context(load_session(session_id))
     messages = [
-        {
-            "role": "system",
-            "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")
-        },
-        {
-            "role": "user",
-            "content": (
-                "Refina de manera iterativa. Responde SOLO con un objeto JSON. "
-                "Si el usuario agregó aclaraciones, incorpóralas en la versión refinada.\n\n"
-                f"Esquema (JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
-                f"Instrucciones de usuario (JSON):\n{json.dumps(guidance, ensure_ascii=False)}"
-            )
-        }
+        {"role": "system", "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
+        {"role": "user", "content": (
+            "Refina de manera iterativa. Responde SOLO con un objeto JSON. "
+            "Si el usuario agregó aclaraciones, incorpóralas en la versión refinada.\n\n"
+            f"Esquema (JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
+            f"Instrucciones de usuario (JSON):\n{json.dumps(guidance, ensure_ascii=False)}"
+        )}
     ]
 
     resp = client.chat.completions.create(
@@ -109,18 +148,10 @@ def refine_question_step(
     out.setdefault("confidence", 0.0)
     return out
 
-
 def refine_question(user_question: str, schema: dict, session_id: str) -> dict:
     """
-    Devuelve un objeto JSON:
-    {
-      "refined_question": "...",
-      "clarifications": ["...","..."],
-      "assumptions": ["..."],
-      "confidence": 0.0..1.0
-    }
+    Devuelve JSON: { refined_question, clarifications, assumptions, confidence }
     """
-    # contexto breve (reutilizamos el tuyo)
     short_ctx = summarize_for_context(load_session(session_id))
     messages = [
         {"role": "system", "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
@@ -137,46 +168,34 @@ def refine_question(user_question: str, schema: dict, session_id: str) -> dict:
         response_format={"type": "json_object"}
     )
     out = json.loads(resp.choices[0].message.content)
-
-    # saneamos claves mínimas
     out.setdefault("refined_question", user_question)
     out.setdefault("clarifications", [])
     out.setdefault("assumptions", [])
     out.setdefault("confidence", 0.0)
     return out
 
-
-
 # ========= LLM setup =========
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("MODEL", "gpt-4o-mini")
-
 SYSTEM = open("sample_prompts/system_sql_analyst.md").read()
 
 # ========= Planificación =========
 def plan_query(user_question: str, schema: dict, session_id: str) -> dict:
-    # contexto corto desde la sesión
     short_ctx = summarize_for_context(load_session(session_id))
     messages = [
-        {
-            "role": "system",
-            "content": (
-                SYSTEM
-                + "\n\nIMPORTANTE: Responde en JSON válido (un único objeto JSON)."
-                + "\nContexto reciente (resumen para mantener coherencia):\n"
-                + (short_ctx or "- (sin contexto)")
-            )
-        },
-        {
-            "role": "user",
-            "content": (
-                "Formato de salida: JSON estricto. "
-                "Entrega solo un objeto JSON, sin texto adicional."
-                f"\nEsquema disponible (en JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
-                f"Pregunta: {user_question}"
-            )
-        }
+        {"role": "system", "content": (
+            SYSTEM
+            + "\n\nIMPORTANTE: Responde en JSON válido (un único objeto JSON)."
+            + "\nContexto reciente (resumen para mantener coherencia):\n"
+            + (short_ctx or "- (sin contexto)")
+        )},
+        {"role": "user", "content": (
+            "Formato de salida: JSON estricto. "
+            "Entrega solo un objeto JSON, sin texto adicional."
+            f"\nEsquema disponible (en JSON):\n{json.dumps(schema, ensure_ascii=False)}\n\n"
+            f"Pregunta: {user_question}"
+        )}
     ]
     resp = client.chat.completions.create(
         model=MODEL,
@@ -191,23 +210,18 @@ def plan_query(user_question: str, schema: dict, session_id: str) -> dict:
 def make_chart(df: pd.DataFrame, viz: dict):
     if df.empty:
         return None
-
     kind = (viz or {}).get("type", "none")
     if kind == "none":
         return None
 
-    # Detectar columnas numéricas y no-numéricas
     num_cols = df.select_dtypes(include=["number"]).columns.tolist()
     cat_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
-
     if not num_cols:
-        return None  # no hay nada que graficar
+        return None
 
-    # defaults: primera cat y primera numérica
     x = cat_cols[0] if cat_cols else df.columns[0]
-    y = num_cols[0] if num_cols else df.columns[1]  # fallback por si viene todo como object
+    y = num_cols[0] if num_cols else (df.columns[1] if len(df.columns) > 1 else df.columns[0])
 
-    # --- normalizaciones/fixes previos al plot ---
     if not pd.api.types.is_numeric_dtype(df[y]):
         df = df.copy()
         df[y] = pd.to_numeric(df[y], errors="coerce")
@@ -239,17 +253,16 @@ def make_chart(df: pd.DataFrame, viz: dict):
     return buf
 
 # ========= Orquestación / Respuesta =========
-
 def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
     schema = get_schema()
 
-    # 1) Refinar la pregunta (nuevo paso)
+    # 1) Refinar la pregunta
     refinement = refine_question(user_question, schema, session_id)
     final_question = refinement.get("refined_question") or user_question
     if not auto_use_refined:
-        final_question = user_question  # por si querés desactivar en algún llamado
+        final_question = user_question
 
-    # 2) Planificar sobre la pregunta final (tu paso original)
+    # 2) Planificar y ejecutar
     plan = plan_query(final_question, schema, session_id)
     sql = plan.get("sql", "")
 
@@ -261,9 +274,10 @@ def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
         hist = load_session(session_id)
         hist.append({
             "ts": time.time(),
+            "question": final_question,             # <-- compat UI
             "question_original": user_question,
             "question_refined": final_question,
-            "refinement": refinement,             # <-- lo guardamos completo
+            "refinement": refinement,
             "plan": plan,
             "sql": sql,
             "df_head": df.head(20).to_dict(orient="records"),
@@ -283,10 +297,10 @@ def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
         }
 
     except Exception as e:
-        # Guardar intento fallido con refinamiento
         hist = load_session(session_id)
         hist.append({
             "ts": time.time(),
+            "question": final_question,             # <-- compat UI
             "question_original": user_question,
             "question_refined": final_question,
             "refinement": refinement,
@@ -308,12 +322,8 @@ def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
             "error": str(e),
         }
 
-
-
-
-
 def clear_session(session_id: str):
     """Borra por completo el historial persistido de la sesión."""
     p = _session_path(session_id)
     if p.exists():
-        p.unlink()  # elimina el archivo .json
+        p.unlink()

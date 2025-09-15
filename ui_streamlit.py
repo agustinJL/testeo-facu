@@ -2,7 +2,12 @@ import os, uuid
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent_core import answer, load_session, refine_question_step  # <-- + refine
+from agent_core import (
+    answer,
+    load_session,
+    refine_question_step,   # para refinamiento iterativo
+    suggest_questions       # para preguntas sugeridas
+)
 from tools_sql import get_schema, get_foreign_keys, table_row_count, sample_rows
 
 # ============ Config ============
@@ -92,6 +97,11 @@ with st.sidebar:
             st.session_state.pop(f"pick_{idx}", None)
         st.session_state["story"] = []
         st.rerun()
+    
+    st.divider()
+    st.subheader("⚙️ Preferencias")
+    st.toggle("💡 Usar 'Preguntas sugeridas'", value=False, key="use_suggestions")
+
 
 # ============ Título & Esquema visual ============
 st.title("🧠📊 Data Analyst Agent")
@@ -116,10 +126,38 @@ with st.expander("🔎 Esquema de la base (visual y navegable)", expanded=False)
             with st.expander(f"Preview: {t} (5 filas)"):
                 st.dataframe(sample_rows(t, 5))
 
+# ============ Sugerencias de preguntas ============
+if st.session_state.get("use_suggestions", True):
+    st.subheader("💡 Preguntas sugeridas")
+    schema_cached, _ = _cached_schema()
+
+    # Tomamos el inicio que el usuario esté tecleando en el campo de refinamiento (si lo hay)
+    partial = st.session_state.get("user_q", "").strip() or None
+
+    with st.spinner("🤔 Pensando en preguntas útiles..."):
+        suggs = suggest_questions(schema_cached, partial=partial, k=5)
+
+    if not suggs:
+        st.caption("Escribí una idea abajo y te sugiero variantes útiles según el esquema.")
+
+    for idx, s in enumerate(suggs, 1):
+        with st.container():
+            st.markdown(f"**{idx}. {s['question']}**")
+            if s.get("why"):
+                st.caption(f"Por qué: {s['why']}")
+            c1, c2 = st.columns([1,1])
+            if c1.button("Usar en refinamiento", key=f"use_ref_{idx}"):
+                st.session_state["user_q"] = s["question"]
+                st.rerun()
+            if c2.button("Usar en ejecución directa", key=f"use_dir_{idx}"):
+                st.session_state["direct_q"] = s["question"]
+                st.rerun()
+        st.divider()
+
+
+
 # ============ Refinamiento iterativo (opcional) ============
 st.subheader("🗣️ Refinamiento iterativo (opcional)")
-schema_cached, _ = _cached_schema()
-
 user_q = st.text_input("Planteá tu pregunta de negocio:", key="user_q")
 
 cols_ref = st.columns([1,1,1])
