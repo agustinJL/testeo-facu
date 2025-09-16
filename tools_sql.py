@@ -1,105 +1,128 @@
 import os
 import re
 import sqlite3
+from pathlib import Path
 import pandas as pd
 from sqlglot import parse_one, exp
 from sqlglot.errors import ParseError
 
-# --- Config ---
-DB_PATH = os.getenv("DB_PATH", "toy.db")
+# =========================================
+# Config y helpers de conexión / semilla
+# =========================================
+
+# Ruta portable por defecto: <repo>/tools_sql/data/toy.db
+_DEFAULT_DB = Path(__file__).parent / "data" / "toy.db"
+DB_PATH = Path(os.getenv("DB_PATH", str(_DEFAULT_DB))).resolve()
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 ROW_LIMIT = int(os.getenv("ROW_LIMIT", "1000"))
 
-# Raíces de lectura válidas (sqlglot tree.key)
-ALLOWED_ROOTS = {"SELECT", "WITH", "UNION", "EXCEPT", "INTERSECT", "JOIN"}
+def _conn():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
+def _tables_present() -> set[str]:
+    with _conn() as cx:
+        cur = cx.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        return {r[0] for r in cur.fetchall()}
 
+def ensure_db():
+    """
+    Crea/siembra la DB si no existe o si faltan tablas clave.
+    Usa seed_db.seed_db(DB_PATH) sin side-effects (seed_db refactorizado).
+    """
+    must_seed = not DB_PATH.exists()
+    needed = {"customers", "products", "orders"}
+    if not must_seed:
+        # Si existe el archivo, verificamos tablas requeridas
+        try:
+            present = _tables_present()
+            if not needed.issubset(present):
+                must_seed = True
+        except Exception:
+            must_seed = True
+
+    if must_seed:
+        # Import tardío para evitar side-effects
+        from seed_db import seed_db as _seed
+        _seed(str(DB_PATH))
+
+# =========================================
+# Esquema / info
+# =========================================
 
 def get_foreign_keys():
     """Devuelve lista de relaciones [(from_table, from_col, to_table, to_col)]."""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [r[0] for r in cur.fetchall()]
-    rels = []
-    for t in tables:
-        try:
-            cur.execute(f"PRAGMA foreign_key_list({t})")
-            for (id, seq, table, from_col, to_col, on_update, on_delete, match) in cur.fetchall():
-                rels.append((t, from_col, table, to_col))
-        except Exception:
-            pass
-    conn.close()
+    ensure_db()
+    with _conn() as cx:
+        cur = cx.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cur.fetchall()]
+        rels = []
+        for t in tables:
+            try:
+                cur.execute(f"PRAGMA foreign_key_list({t})")
+                for (_id, _seq, table, from_col, to_col, _up, _del, _match) in cur.fetchall():
+                    rels.append((t, from_col, table, to_col))
+            except Exception:
+                pass
     return rels
 
 def table_row_count(table: str) -> int:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    try:
-        cur.execute(f"SELECT COUNT(*) FROM {table}")
-        n = cur.fetchone()[0]
-    except Exception:
-        n = 0
-    conn.close()
+    ensure_db()
+    with _conn() as cx:
+        cur = cx.cursor()
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")
+            n = cur.fetchone()[0]
+        except Exception:
+            n = 0
     return n
 
 def sample_rows(table: str, n: int = 5):
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(f"SELECT * FROM {table} LIMIT {n}", conn)
-    conn.close()
+    ensure_db()
+    with _conn() as cx:
+        df = pd.read_sql_query(f"SELECT * FROM {table} LIMIT {n}", cx)
     return df
 
-
-# =========================
-#  Esquema de la base
-# =========================
 def get_schema():
     """
     Devuelve un dict {tabla: [{name, type}, ...]} usando PRAGMA table_info.
     """
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [r[0] for r in cur.fetchall()]
-
+    ensure_db()
     schema = {}
-    for t in tables:
-        cur.execute(f"PRAGMA table_info({t})")
-        cols = [{"name": c[1], "type": c[2]} for c in cur.fetchall()]
-        schema[t] = cols
-
-    conn.close()
+    with _conn() as cx:
+        cur = cx.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cur.fetchall()]
+        for t in tables:
+            cur.execute(f"PRAGMA table_info({t})")
+            cols = [{"name": c[1], "type": c[2]} for c in cur.fetchall()]
+            schema[t] = cols
     return schema
 
+# =========================================
+# Sanitización de SQL
+# =========================================
 
-# =========================
-#  Sanitización de SQL
-# =========================
 def strip_fences(sql: str) -> str:
     sql = sql.strip()
-    # Maneja ```sql ... ``` o ``` ... ```
     if sql.startswith("```"):
         parts = sql.split("```")
         if len(parts) >= 3:
-            # contenido entre fences
             sql = parts[1]
         else:
             sql = sql.strip("`")
     return sql.strip()
 
-
 def strip_line_comments(sql: str) -> str:
-    # quita comentarios de línea -- ...
     return "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
 
-
 def strip_block_comments(sql: str) -> str:
-    # quita /* ... */ (naive pero suficiente aquí)
     return re.sub(r"/\*.*?\*/", "", sql, flags=re.S)
-
 
 def strip_trailing_semicolon(sql: str) -> str:
     return sql.rstrip().rstrip(";").rstrip()
-
 
 def sanitize(sql: str) -> str:
     sql = strip_fences(sql)
@@ -109,7 +132,9 @@ def sanitize(sql: str) -> str:
     return sql.strip()
 
 def _forbidden_nodes_tuple():
-    # Tomamos solo las clases que existan en esta versión de sqlglot
+    """
+    Prepara lista dinámica de nodos prohibidos según versión de sqlglot disponible.
+    """
     names = [
         "Insert", "Update", "Delete", "Create", "Alter", "Drop",
         "Command",      # PRAGMA, VACUUM, etc.
@@ -123,10 +148,10 @@ def _forbidden_nodes_tuple():
             nodes.append(cls)
     return tuple(nodes)
 
+# =========================================
+# Validación y ejecución
+# =========================================
 
-# =========================
-#  Validación segura
-# =========================
 def validate_sql(sql: str, debug: bool = False) -> str:
     sql = sanitize(sql)
     if ";" in sql:
@@ -137,29 +162,21 @@ def validate_sql(sql: str, debug: bool = False) -> str:
     except ParseError as e:
         raise ValueError(f"SQL inválido: {e}")
 
-    # 👇 usa la lista dinámica
     forbidden_nodes = _forbidden_nodes_tuple()
     if any(tree.find(n) for n in forbidden_nodes):
         raise ValueError("Operación no permitida")
 
     return sql
 
-
-
 def enforce_limit(sql: str) -> str:
-    # agrega LIMIT si no existe (sobre el último SELECT)
     if re.search(r"\bLIMIT\b", sql, re.IGNORECASE):
         return sql
     return f"{sql.strip()} LIMIT {ROW_LIMIT}"
 
-
-# =========================
-#  Ejecución
-# =========================
 def run_sql(sql: str) -> pd.DataFrame:
+    ensure_db()
     sql = validate_sql(sql)
     sql = enforce_limit(sql)
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(sql, conn)
-    conn.close()
+    with _conn() as cx:
+        df = pd.read_sql_query(sql, cx)
     return df

@@ -10,7 +10,8 @@ from agent_core import (
     refine_question_step,    # refinamiento iterativo
     suggest_questions        # preguntas sugeridas (opcional)
 )
-from tools_sql import get_schema, get_foreign_keys, table_row_count, sample_rows
+from tools_sql import ensure_db, get_schema, get_foreign_keys, table_row_count, sample_rows
+ensure_db()  # ← crea/siembra si hace falta (deploys en la nube)
 
 # ============ Config ============
 load_dotenv()
