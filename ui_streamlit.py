@@ -22,12 +22,15 @@ if "session_id" not in st.session_state:
     st.session_state["session_id"] = str(uuid.uuid4())
 
 if "results" not in st.session_state:
-    st.session_state["results"] = []       # resultados visibles (df/chart_bytes incluidos)
+    # resultados visibles (df/chart_bytes incluidos)
+    st.session_state["results"] = []
 
 if "refine" not in st.session_state:
     st.session_state["refine"] = None      # estado del refinamiento iterativo
 
 # ============ Utils: diagrama ============
+
+
 def build_schema_dot(schema: dict, fks: list) -> str:
     def esc(s: str) -> str:
         return str(s).replace('"', '\\"')
@@ -45,13 +48,16 @@ def build_schema_dot(schema: dict, fks: list) -> str:
         table_html = f'<<table border="1" cellborder="0" cellspacing="0">{header}{body}</table>>'
         lines.append(f'  "{esc(t)}" [label={table_html}];')
     for ft, fc, tt, tc in fks:
-        lines.append(f'  "{esc(ft)}" -> "{esc(tt)}" [label="{esc(fc)} → {esc(tc)}", fontsize=10];')
+        lines.append(
+            f'  "{esc(ft)}" -> "{esc(tt)}" [label="{esc(fc)} → {esc(tc)}", fontsize=10];')
     lines.append('}')
     return "\n".join(lines)
+
 
 @st.cache_data
 def _cached_schema():
     return get_schema(), get_foreign_keys()
+
 
 # ============ Sidebar: Storytelling + Preferencias ============
 with st.sidebar:
@@ -77,11 +83,11 @@ with st.sidebar:
         for idx in st.session_state["story"]:
             it = disk_history[idx]
             md += [
-                f"## {it.get('question','')}",
+                f"## {it.get('question', '')}",
                 "```sql",
-                it.get("sql",""),
+                it.get("sql", ""),
                 "```",
-                it.get("plan",{}).get("explain",""),
+                it.get("plan", {}).get("explain", ""),
                 ""
             ]
         st.download_button(
@@ -102,23 +108,27 @@ with st.sidebar:
     st.divider()
     st.subheader("⚙️ Preferencias")
     # Toggle: activar/desactivar bloque de sugerencias
-    st.toggle("💡 Usar 'Preguntas sugeridas'", value=False, key="use_suggestions")
+    st.toggle("💡 Usar 'Preguntas sugeridas'",
+              value=False, key="use_suggestions")
 
 # ============ Título & Esquema visual ============
-st.title("🧠📊 Data Analyst Agent")
+st.title("🧠📊 Innovation HUB - Asistente")
 
 with st.expander("🔎 Esquema de la base (visual y navegable)", expanded=False):
     schema, fks = _cached_schema()
-    tab1, tab2, tab3 = st.tabs(["🗺️ Diagrama", "📋 Tablas & columnas", "👀 Muestras"])
+    tab1, tab2, tab3 = st.tabs(
+        ["🗺️ Diagrama", "📋 Tablas & columnas", "👀 Muestras"])
 
     with tab1:
-        st.graphviz_chart(build_schema_dot(schema, fks), use_container_width=True)
+        st.graphviz_chart(build_schema_dot(schema, fks),
+                          use_container_width=True)
 
     with tab2:
         for t, cols in schema.items():
             n = table_row_count(t)
             with st.expander(f"**{t}** — {n} filas"):
-                st.table([{ "columna": c["name"], "tipo": c["type"] } for c in cols])
+                st.table([{"columna": c["name"], "tipo": c["type"]}
+                         for c in cols])
 
     with tab3:
         for t in schema.keys():
@@ -172,27 +182,29 @@ if st.session_state.get("use_suggestions", True):
     suggs = []
     with st.spinner("🤔 Pensando en preguntas útiles..."):
         try:
-            suggs = suggest_questions(schema_cached, partial=partial, k=5) or []
+            suggs = suggest_questions(
+                schema_cached, partial=partial, k=5) or []
             if not isinstance(suggs, list):
                 suggs = []
         except Exception as e:
             st.info(f"No pude traer sugerencias ahora. (Detalle: {e})")
 
     if not suggs:
-        st.caption("Escribí una idea abajo y te sugiero variantes útiles según el esquema.")
+        st.caption(
+            "Escribí una idea abajo y te sugiero variantes útiles según el esquema.")
     else:
         for idx, s in enumerate(suggs, 1):
             with st.container():
-                st.markdown(f"**{idx}. {s.get('question','(sin texto)')}**")
+                st.markdown(f"**{idx}. {s.get('question', '(sin texto)')}**")
                 if s.get("why"):
                     st.caption(f"Por qué: {s['why']}")
-                c1, c2 = st.columns([1,1])
+                c1, c2 = st.columns([1, 1])
                 if c1.button("Usar en refinamiento", key=f"use_ref_{idx}"):
-                    st.session_state["user_q"] = s.get("question","")
+                    st.session_state["user_q"] = s.get("question", "")
                     st.session_state["trigger_refine_from_suggestion"] = True
                     st.rerun()
                 if c2.button("Usar en ejecución directa", key=f"use_dir_{idx}"):
-                    st.session_state["direct_q"] = s.get("question","")
+                    st.session_state["direct_q"] = s.get("question", "")
                     st.session_state["trigger_exec_from_suggestion"] = True
                     st.rerun()
             st.divider()
@@ -201,7 +213,7 @@ if st.session_state.get("use_suggestions", True):
 st.subheader("🗣️ Refinamiento iterativo (opcional)")
 user_q = st.text_input("Planteá tu pregunta de negocio:", key="user_q")
 
-cols_ref = st.columns([1,1,1])
+cols_ref = st.columns([1, 1, 1])
 if cols_ref[0].button("🔍 Empezar a refinar", key="start_refine_btn") and user_q.strip():
     base_q = user_q.strip()
     step = refine_question_step(
@@ -221,8 +233,10 @@ if cols_ref[0].button("🔍 Empezar a refinar", key="start_refine_btn") and user
 # Panel interactivo si hay refinamiento activo
 if st.session_state["refine"]:
     R = st.session_state["refine"]
-    st.caption("Editá la pregunta refinada, elegí aclaraciones sugeridas y refiná de nuevo. Ejecutá cuando estés conforme.")
-    st.text_area("Pregunta refinada (editable):", value=R["current"], key="refined_edit", height=90)
+    st.caption(
+        "Editá la pregunta refinada, elegí aclaraciones sugeridas y refiná de nuevo. Ejecutá cuando estés conforme.")
+    st.text_area("Pregunta refinada (editable):",
+                 value=R["current"], key="refined_edit", height=90)
 
     last = R["steps"][-1]
     sugg = last.get("clarifications", []) or []
@@ -233,9 +247,10 @@ if st.session_state["refine"]:
             if st.checkbox(s, key=f"clar_{len(R['steps'])}_{i}"):
                 chosen.append(s)
 
-    extra = st.text_input("Agregar alguna aclaración propia (opcional):", key=f"extra_{len(R['steps'])}")
+    extra = st.text_input(
+        "Agregar alguna aclaración propia (opcional):", key=f"extra_{len(R['steps'])}")
 
-    c1, c2, c3 = st.columns([1,1,1])
+    c1, c2, c3 = st.columns([1, 1, 1])
     if c1.button("➕ Refinar con estas aclaraciones", key=f"refine_again_{len(R['steps'])}"):
         if extra.strip():
             chosen.append(extra.strip())
@@ -247,14 +262,16 @@ if st.session_state["refine"]:
             user_edited_question=st.session_state["refined_edit"]
         )
         R["user_choices"].extend(chosen)
-        R["current"] = step.get("refined_question", st.session_state["refined_edit"])
+        R["current"] = step.get(
+            "refined_question", st.session_state["refined_edit"])
         R["steps"].append(step)
         st.session_state["refine"] = R
         st.rerun()
 
     if c2.button("✅ Ejecutar ahora", key=f"exec_now_{len(R['steps'])}"):
         with st.spinner("Generando SQL y ejecutando..."):
-            res = answer(R["current"], session_id=st.session_state["session_id"])
+            res = answer(
+                R["current"], session_id=st.session_state["session_id"])
             res["ts"] = res.get("ts", time.time())
             st.session_state["results"].append(res)
         st.session_state["refine"] = None
@@ -267,13 +284,15 @@ if st.session_state["refine"]:
     # Info de confianza
     conf = float(last.get("confidence", 0.0))
     if conf >= 0.75:
-        st.info("La confianza del agente es alta. Si estás conforme, podés **Ejecutar ahora**.")
+        st.info(
+            "La confianza del agente es alta. Si estás conforme, podés **Ejecutar ahora**.")
 
     # Timeline de pasos
     with st.expander("Ver pasos de refinamiento"):
         for idx, s in enumerate(R["steps"], 1):
-            st.markdown(f"**Paso {idx}** — Confianza: {int(100*s.get('confidence',0))}%")
-            st.write("Refinada:", s.get("refined_question",""))
+            st.markdown(
+                f"**Paso {idx}** — Confianza: {int(100*s.get('confidence', 0))}%")
+            st.write("Refinada:", s.get("refined_question", ""))
             if s.get("assumptions"):
                 st.caption("Supuestos de este paso:")
                 for a in s["assumptions"]:
@@ -282,7 +301,8 @@ if st.session_state["refine"]:
 
 # ============ Ejecución directa ============
 st.subheader("⚡ Ejecución rápida (saltear refinamiento)")
-q = st.text_input("Preguntale a la base (ej: ventas por categoría por mes):", "", key="direct_q")
+q = st.text_input(
+    "Preguntale a la base (ej: ventas por categoría por mes):", "", key="direct_q")
 run = st.button("Ejecutar", type="primary", key="direct_run_btn")
 
 if run and q.strip():
@@ -317,7 +337,8 @@ for i, res in enumerate(reversed(st.session_state["results"]), 1):
                 st.write(f"• {a}")
 
         if "confidence" in ref:
-            st.caption(f"Confianza del agente: {round(float(ref['confidence'])*100):d}%")
+            st.caption(
+                f"Confianza del agente: {round(float(ref['confidence'])*100):d}%")
 
         st.markdown(f"### Resultado #{i}")
         st.code(res.get("sql", ""), language="sql")
@@ -343,7 +364,8 @@ for i, res in enumerate(reversed(st.session_state["results"]), 1):
             )
 
         if res.get("chart_bytes"):
-            st.image(res["chart_bytes"], caption="Visualización sugerida", use_column_width=True)
+            st.image(res["chart_bytes"],
+                     caption="Visualización sugerida", use_column_width=True)
 
         with st.expander("Notas / supuestos", expanded=False):
             st.write(res.get("plan", {}).get("notes", ""))

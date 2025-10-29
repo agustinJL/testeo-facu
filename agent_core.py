@@ -1,4 +1,9 @@
-import os, json, io, uuid, pathlib, time
+import os
+import json
+import io
+import uuid
+import pathlib
+import time
 import pandas as pd
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
@@ -9,8 +14,10 @@ from tools_sql import get_schema, run_sql
 SESS_DIR = pathlib.Path("./.session")
 SESS_DIR.mkdir(exist_ok=True)
 
+
 def _session_path(session_id: str):
     return SESS_DIR / f"{session_id}.json"
+
 
 def load_session(session_id: str) -> list:
     p = _session_path(session_id)
@@ -18,8 +25,11 @@ def load_session(session_id: str) -> list:
         return json.loads(p.read_text())
     return []
 
+
 def save_session(session_id: str, history: list):
-    _session_path(session_id).write_text(json.dumps(history, ensure_ascii=False, indent=2))
+    _session_path(session_id).write_text(
+        json.dumps(history, ensure_ascii=False, indent=2))
+
 
 def summarize_for_context(history: list, max_items: int = 4) -> str:
     """
@@ -40,6 +50,7 @@ def summarize_for_context(history: list, max_items: int = 4) -> str:
         bullets.append(f"- Q: {q}\n  SQL: {sql}\n  Insight: {insight}")
     return "\n".join(bullets)
 
+
 # === Sugeridor de preguntas (business-friendly) ===
 SUGGEST_SYSTEM = """Eres un analista de negocio senior.
 Dado un ESQUEMA de base de datos y (opcional) un inicio de pregunta del usuario,
@@ -51,6 +62,7 @@ Devuelve SOLO JSON con una lista bajo 'suggestions', donde cada item es:
 
 Evita jerga técnica, sé concreto y con foco en negocio.
 """
+
 
 def suggest_questions(schema: dict, partial: str | None = None, k: int = 5) -> list[dict]:
     """
@@ -64,7 +76,8 @@ def suggest_questions(schema: dict, partial: str | None = None, k: int = 5) -> l
     messages = [
         {"role": "system", "content": SUGGEST_SYSTEM},
         {"role": "user", "content": "Responde SOLO en JSON (json estricto)."},
-        {"role": "user", "content": json.dumps(user_content, ensure_ascii=False)}
+        {"role": "user", "content": json.dumps(
+            user_content, ensure_ascii=False)}
     ]
     try:
         resp = client.chat.completions.create(
@@ -90,10 +103,14 @@ def suggest_questions(schema: dict, partial: str | None = None, k: int = 5) -> l
     except Exception:
         # fallback simple si el modelo falla
         return [
-            {"question":"ventas por categoría por mes", "why":"tendencia básica por mix", "tags":["ventas","categoría","mensual"]},
-            {"question":"top 10 productos por revenue", "why":"ranking de contribución", "tags":["top","producto","revenue"]},
-            {"question":"evolución mensual por país", "why":"comparar mercados", "tags":["evolución","país","mensual"]},
+            {"question": "ventas por categoría por mes", "why": "tendencia básica por mix",
+                "tags": ["ventas", "categoría", "mensual"]},
+            {"question": "top 10 productos por revenue",
+                "why": "ranking de contribución", "tags": ["top", "producto", "revenue"]},
+            {"question": "evolución mensual por país", "why": "comparar mercados",
+                "tags": ["evolución", "país", "mensual"]},
         ][:k]
+
 
 # --- Prompt corto para refinar preguntas ---
 REFINE_SYSTEM = """Eres un PM/BI senior. Tu tarea es ayudar a un analista a
@@ -104,6 +121,7 @@ Debes devolver SOLO JSON válido, con estos campos:
 - assumptions: lista[str] con supuestos seguros si falta info (máx 3).
 - confidence: float 0..1 (qué tan seguro estás de que ya es ejecutable).
 """
+
 
 def refine_question_step(
     base_question: str,
@@ -117,7 +135,8 @@ def refine_question_step(
     el LLM las considera y devuelve una nueva sugerencia.
     """
     user_selected_clarifications = user_selected_clarifications or []
-    effective_question = user_edited_question.strip() if user_edited_question else base_question
+    effective_question = user_edited_question.strip(
+    ) if user_edited_question else base_question
 
     guidance = {
         "base_question": base_question,
@@ -127,7 +146,8 @@ def refine_question_step(
 
     short_ctx = summarize_for_context(load_session(session_id))
     messages = [
-        {"role": "system", "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
+        {"role": "system", "content": REFINE_SYSTEM +
+            "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
         {"role": "user", "content": (
             "Refina de manera iterativa. Responde SOLO con un objeto JSON. "
             "Si el usuario agregó aclaraciones, incorpóralas en la versión refinada.\n\n"
@@ -148,13 +168,15 @@ def refine_question_step(
     out.setdefault("confidence", 0.0)
     return out
 
+
 def refine_question(user_question: str, schema: dict, session_id: str) -> dict:
     """
     Devuelve JSON: { refined_question, clarifications, assumptions, confidence }
     """
     short_ctx = summarize_for_context(load_session(session_id))
     messages = [
-        {"role": "system", "content": REFINE_SYSTEM + "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
+        {"role": "system", "content": REFINE_SYSTEM +
+            "\n\nContexto reciente:\n" + (short_ctx or "- (sin contexto)")},
         {"role": "user", "content": (
             "Responde SOLO en JSON (json estricto). No incluyas texto fuera del objeto JSON.\n"
             "Esquema disponible (JSON):\n"
@@ -174,11 +196,14 @@ def refine_question(user_question: str, schema: dict, session_id: str) -> dict:
     out.setdefault("confidence", 0.0)
     return out
 
+
 # ========= LLM setup =========
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-MODEL = os.getenv("MODEL", "gpt-4o-mini")
+client = OpenAI(api_key=os.getenv("GITHUB_API_KEY"),
+                base_url=os.getenv("BASE_URL"))
+MODEL = os.getenv("MODEL")
 SYSTEM = open("sample_prompts/system_sql_analyst.md").read()
+
 
 # ========= Planificación =========
 def plan_query(user_question: str, schema: dict, session_id: str) -> dict:
@@ -203,10 +228,12 @@ def plan_query(user_question: str, schema: dict, session_id: str) -> dict:
         response_format={"type": "json_object"}
     )
     out = json.loads(resp.choices[0].message.content)
-    assert {"sql","explain","viz_suggestion","notes"} <= set(out.keys())
+    assert {"sql", "explain", "viz_suggestion", "notes"} <= set(out.keys())
     return out
 
 # ========= Charting =========
+
+
 def make_chart(df: pd.DataFrame, viz: dict):
     if df.empty:
         return None
@@ -220,7 +247,8 @@ def make_chart(df: pd.DataFrame, viz: dict):
         return None
 
     x = cat_cols[0] if cat_cols else df.columns[0]
-    y = num_cols[0] if num_cols else (df.columns[1] if len(df.columns) > 1 else df.columns[0])
+    y = num_cols[0] if num_cols else (
+        df.columns[1] if len(df.columns) > 1 else df.columns[0])
 
     if not pd.api.types.is_numeric_dtype(df[y]):
         df = df.copy()
@@ -229,9 +257,11 @@ def make_chart(df: pd.DataFrame, viz: dict):
     try:
         if pd.api.types.is_object_dtype(df[x]):
             if df[x].astype(str).str.match(r"^\d{4}[-/]\d{2}([-/]\d{2})?$").all():
-                _x_dt = pd.to_datetime(df[x].astype(str), errors="coerce").rename("_x_dt")
-                df = pd.concat([df, _x_dt], axis=1).sort_values("_x_dt").drop(columns=["_x_dt"])
-    except Exception:
+                _x_dt = pd.to_datetime(df[x].astype(
+                    str), errors="coerce").rename("_x_dt")
+                df = pd.concat([df, _x_dt], axis=1).sort_values(
+                    "_x_dt").drop(columns=["_x_dt"])
+    except (ValueError, TypeError, pd.errors.OutOfBoundsDatetime):
         pass
 
     df = df.dropna(subset=[y])
@@ -253,6 +283,8 @@ def make_chart(df: pd.DataFrame, viz: dict):
     return buf
 
 # ========= Orquestación / Respuesta =========
+
+
 def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
     schema = get_schema()
 
@@ -321,6 +353,7 @@ def answer(user_question: str, session_id: str, auto_use_refined: bool = True):
             "chart_bytes": None,
             "error": str(e),
         }
+
 
 def clear_session(session_id: str):
     """Borra por completo el historial persistido de la sesión."""

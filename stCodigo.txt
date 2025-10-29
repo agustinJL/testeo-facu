@@ -1,0 +1,6 @@
+with st.expander("🔎 Esquema de la base (visual y navegable)", expanded=False):
+    schema, fks = _cached_schema()
+    tab1, tab2, tab3 = st.tabs(
+        ["🗺️ Diagrama", "📋 Tablas & columnas", "👀 Muestras"])
+
+
